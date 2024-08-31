@@ -58,20 +58,34 @@
       };
     };
 
-    localPkgs = import ./pkgs;
-
     platforms = domain:
       map
       (lib.removeSuffix ".nix")
       (lib.attrNames (builtins.readDir ./${domain}/platforms));
-
     configs = domain: builder:
       lib.listToAttrs
       (map builder (platforms domain));
+
+importAll = { root, exclude ? [ ] }:
+with builtins; with lib;
+
+# http://chriswarbo.net/projects/nixos/useful_hacks.html
+let
+  basename = removeSuffix ".nix";
+
+  isMatch = name: type: (hasSuffix ".nix" name || type == "directory")
+    && ! elem name (map basename exclude);
+
+  entry = name: _: {
+    name = basename name;
+    value = import (root + "/${name}");
+  };
+in
+mapAttrs' entry (filterAttrs isMatch (readDir root));
+
   in 
 with pkgs.lib;
 {
-    packages.${system} = localPkgs pkgs;
     formatter.${system} = pkgs.alejandra;
 
       nixosConfigurations =
