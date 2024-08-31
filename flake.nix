@@ -13,7 +13,7 @@
   };
 
   # Configuraciones
-  outputs = flakes@{
+  outputs = flakes @ {
     self,
     nixpkgs,
     unstable,
@@ -66,31 +66,33 @@
       lib.listToAttrs
       (map builder (platforms domain));
 
-importAll = { root, exclude ? [ ] }:
-with builtins; with lib;
-
-# http://chriswarbo.net/projects/nixos/useful_hacks.html
-let
-  basename = removeSuffix ".nix";
-
-  isMatch = name: type: (hasSuffix ".nix" name || type == "directory")
-    && ! elem name (map basename exclude);
-
-  entry = name: _: {
-    name = basename name;
-    value = import (root + "/${name}");
-  };
-in
-mapAttrs' entry (filterAttrs isMatch (readDir root));
-
-  in 
-with pkgs.lib;
-{
-    formatter.${system} = pkgs.alejandra;
-
-      nixosConfigurations =
+    importAll = {
+      root,
+      exclude ? [],
+    }:
+      with builtins;
+      with lib;
+      # http://chriswarbo.net/projects/nixos/useful_hacks.html
         let
-          nixosSystem = { modules }: makeOverridable nixpkgs.lib.nixosSystem {
+          basename = removeSuffix ".nix";
+
+          isMatch = name: type:
+            (hasSuffix ".nix" name || type == "directory")
+            && ! elem name (map basename exclude);
+
+          entry = name: _: {
+            name = basename name;
+            value = import (root + "/${name}");
+          };
+        in
+          mapAttrs' entry (filterAttrs isMatch (readDir root));
+  in
+    with pkgs.lib; {
+      formatter.${system} = pkgs.alejandra;
+
+      nixosConfigurations = let
+        nixosSystem = {modules}:
+          makeOverridable nixpkgs.lib.nixosSystem {
             inherit modules pkgs system;
 
             specialArgs = {
@@ -98,26 +100,28 @@ with pkgs.lib;
             };
           };
 
-          hostConfig = main: nixosSystem {
+        hostConfig = main:
+          nixosSystem {
             modules = [
               ./sys
               main
             ];
           };
-        in
-        mapAttrs (_: hostConfig) (importAll { root = ./sys/platforms; });
+      in
+        mapAttrs (_: hostConfig) (importAll {root = ./sys/platforms;});
 
-      homeConfigurations =
-        let
-          registry = { ... }: {
-            config.nix.registry = mapAttrs
-              (_: value: {
-                flake = value;
-              })
-              flakes;
-          };
+      homeConfigurations = let
+        registry = {...}: {
+          config.nix.registry =
+            mapAttrs
+            (_: value: {
+              flake = value;
+            })
+            flakes;
+        };
 
-          home = platform: home-manager.lib.homeManagerConfiguration {
+        home = platform:
+          home-manager.lib.homeManagerConfiguration {
             inherit pkgs;
 
             modules = [
@@ -127,14 +131,12 @@ with pkgs.lib;
             ];
           };
 
-          platformHome = name: platform:
-            let
-              value = home platform;
-            in
-            {
-              inherit name value;
-            };
-        in
-        mapAttrs' platformHome (importAll { root = ./home/platforms; });
+        platformHome = name: platform: let
+          value = home platform;
+        in {
+          inherit name value;
+        };
+      in
+        mapAttrs' platformHome (importAll {root = ./home/platforms;});
     };
 }
